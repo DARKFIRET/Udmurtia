@@ -20,6 +20,9 @@ class Route extends Model
         'cost',
     ];
 
+    // чтобы в JSON всегда был available_slots
+    protected $appends = ['available_slots'];
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -36,8 +39,12 @@ class Route extends Model
     }
 
     public function getAvailableSlotsAttribute()
-    {
-        $bookedSlots = $this->bookings()->where('canceled', false)->sum('slots');
-        return $this->slots - $bookedSlots;
-    }
+{
+    $bookedSlots = $this->bookings()
+        ->where('canceled', false)
+        ->sum('slots');
+
+    return max($this->slots - $bookedSlots, 0);
+}
+
 }

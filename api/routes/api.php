@@ -58,7 +58,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/routes/{routeId}/book', [BookingController::class, 'book']); // Запись на экскурсию
-    Route::post('/routes/{routeId}/cancel', [BookingController::class, 'cancel']); // Отмена участия
+    Route::patch('/routes/{routeId}/cancel', [BookingController::class, 'cancel']); // Отмена участия
     Route::get('/bookings', [BookingController::class, 'getUserBookings']); // Получение бронирований пользователя
 });
 
