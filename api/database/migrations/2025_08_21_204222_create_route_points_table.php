@@ -10,10 +10,11 @@ return new class extends Migration
     {
         Schema::create('route_points', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('route_id')->constrained()->onDelete('cascade'); // Связь с маршрутом
-            $table->text('description')->nullable(); // Описание точки
-            $table->string('photo_path')->nullable(); // Путь к фото
-            $table->integer('order')->default(0); // Порядок точки в маршруте
+            $table->foreignId('route_id')->nullable(); // Remove constrained() for now
+            $table->text('description')->nullable();
+            $table->string('photo_path')->nullable();
+            $table->integer('order')->nullable();
+            $table->integer('day')->nullable();
             $table->timestamps();
         });
     }

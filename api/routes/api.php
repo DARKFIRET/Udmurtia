@@ -1,12 +1,15 @@
 <?php
 
 use App\Http\Controllers\Admin\BookingController;
+use App\Http\Controllers\Admin\RoutePointController;
 use App\Http\Controllers\Admin\RouteController;
 use App\Http\Controllers\Admin\UdmurtiaController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\Admin\ExcursionController;
 use App\Http\Controllers\PhotoController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
 
 // USER ____________________________________________________________________
 Route::post('/register', [AuthController::class, 'register']);
@@ -45,21 +48,36 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // АДМИН СОЗДАНИЕ ТУР МАРШРУТА _____________________________________________________
 
+
+
+
+
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('admin')->group(function () {
+        // Route routes
         Route::post('/routes', [RouteController::class, 'store']);
         Route::put('/routes/{id}', [RouteController::class, 'update']);
         Route::patch('/routes/{id}', [RouteController::class, 'patch']);
         Route::delete('/routes/{id}', [RouteController::class, 'destroy']);
+
+        // RoutePoint routes
+        Route::post('/route-points', [RoutePointController::class, 'store']);
+        Route::put('/route-points/{id}', [RoutePointController::class, 'update']);
+        Route::delete('/route-points/{id}', [RoutePointController::class, 'destroy']);
+        Route::post('/excursions', [ExcursionController::class, 'store']);
+        Route::put('/excursions/{id}', [ExcursionController::class, 'update']);
+        Route::delete('/excursions/{id}', [ExcursionController::class, 'destroy']);
     });
 });
-
+Route::get('/admin/routes', [RouteController::class, 'index']);
+Route::get('/excursions', [ExcursionController::class, 'index']);
+Route::get('/excursions/{id}', [ExcursionController::class, 'show']);
 // БРОНИРОВАНИЯ _____________________________________________________________
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/routes/{routeId}/book', [BookingController::class, 'book']); // Запись на экскурсию
-    Route::patch('/routes/{routeId}/cancel', [BookingController::class, 'cancel']); // Отмена участия
-    Route::get('/bookings', [BookingController::class, 'getUserBookings']); // Получение бронирований пользователя
+    Route::post('/excursions/{excursionId}/book', [BookingController::class, 'book']);
+    Route::patch('/excursions/{excursionId}/cancel', [BookingController::class, 'cancel']);
+    Route::get('/bookings', [BookingController::class, 'getUserBookings']);
 });
 
 // __________________________________________________________________

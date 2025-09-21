@@ -4,17 +4,18 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
-use App\Models\Route;
+use App\Models\Excursion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class BookingController extends Controller
 {
     /**
      * Записать пользователя на экскурсию
      */
-    public function book(Request $request, $routeId)
+    public function book(Request $request, $excursionId)
     {
         $user = Auth::user();
         if (!$user) {
@@ -25,18 +26,18 @@ class BookingController extends Controller
             'slots' => 'required|integer|min:1',
         ]);
 
-        $route = Route::findOrFail($routeId);
+        $excursion = Excursion::findOrFail($excursionId);
 
-        // Считаем доступные слоты
-        $bookedSlots = $route->bookings()->where('canceled', false)->sum('slots');
-        $availableSlots = $route->slots - $bookedSlots;
+        // Считаем доступные слоты (предполагаем, что all_people на экскурсии — это максимум слотов)
+        $bookedSlots = $excursion->bookings()->where('canceled', false)->sum('slots');
+        $availableSlots = $excursion->all_people - $bookedSlots;
 
         if ($validated['slots'] > $availableSlots) {
             return response()->json(['message' => 'Not enough available slots'], 400);
         }
 
         // Проверяем, есть ли у пользователя уже бронь на эту экскурсию
-        $existingBooking = Booking::where('route_id', $routeId)
+        $existingBooking = Booking::where('excursion_id', $excursionId)
             ->where('user_id', $user->id)
             ->where('canceled', false)
             ->first();
@@ -49,7 +50,7 @@ class BookingController extends Controller
 
             Log::info('Booking updated (slots increased):', [
                 'user_id' => $user->id,
-                'route_id' => $routeId,
+                'excursion_id' => $excursionId,
                 'slots' => $existingBooking->slots,
             ]);
 
@@ -61,7 +62,7 @@ class BookingController extends Controller
 
         // Создаём новую бронь
         $booking = Booking::create([
-            'route_id' => $routeId,
+            'excursion_id' => $excursionId,
             'user_id' => $user->id,
             'slots' => $validated['slots'],
             'canceled' => false,
@@ -69,7 +70,7 @@ class BookingController extends Controller
 
         Log::info('Booking created:', [
             'user_id' => $user->id,
-            'route_id' => $routeId,
+            'excursion_id' => $excursionId,
             'slots' => $validated['slots'],
         ]);
 
@@ -79,26 +80,25 @@ class BookingController extends Controller
         ], 201);
     }
 
-
     /**
      * Отменить участие в экскурсии
      */
-    public function cancel(Request $request, $routeId)
+    public function cancel(Request $request, $excursionId)
     {
         $user = Auth::user();
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $route = Route::findOrFail($routeId);
+        $excursion = Excursion::findOrFail($excursionId);
 
-        // Проверка — можно ли отменять
-        if (now()->diffInDays(\Carbon\Carbon::parse($route->start_date), false) < 7) {
+        // Проверка — можно ли отменять (используем start_date из экскурсии)
+        if (now()->diffInDays(\Carbon\Carbon::parse($excursion->start_date), false) < 7) {
             return response()->json(['message' => 'Cancellation not allowed less than 7 days before start'], 403);
         }
 
         // Ищем бронь пользователя на экскурсию
-        $booking = Booking::where('route_id', $routeId)
+        $booking = Booking::where('excursion_id', $excursionId)
             ->where('user_id', $user->id)
             ->where('canceled', false)
             ->first();
@@ -115,7 +115,7 @@ class BookingController extends Controller
 
             Log::info('Booking partially canceled', [
                 'user_id' => $user->id,
-                'route_id' => $routeId,
+                'excursion_id' => $excursionId,
                 'slots_left' => $booking->slots,
             ]);
 
@@ -130,7 +130,7 @@ class BookingController extends Controller
 
         Log::info('Booking canceled', [
             'user_id' => $user->id,
-            'route_id' => $routeId,
+            'excursion_id' => $excursionId,
         ]);
 
         return response()->json([
@@ -149,17 +149,30 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $bookings = Booking::with('route')
+        $bookings = Booking::with('excursion.route.routePoints') // Updated to include route and routePoints
             ->where('user_id', $user->id)
             ->where('canceled', false)
             ->get()
             ->map(function ($booking) {
                 return [
-                    'route_id' => $booking->route_id,
-                    'start_location' => $booking->route->start_location,
-                    'start_date' => $booking->route->start_date,
-                    'start_time' => $booking->route->start_time,
+                    'excursion_id' => $booking->excursion_id,
+                    'start_point' => $booking->excursion->start_point,
+                    'start_date' => $booking->excursion->start_date,
+                    'start_time' => $booking->excursion->start_time,
                     'slots_booked' => $booking->slots,
+                    'route' => $booking->excursion->route ? [
+                        'id' => $booking->excursion->route->id,
+                        'description' => $booking->excursion->route->description,
+                        'route_points' => $booking->excursion->route->routePoints->map(function ($point) {
+                            return [
+                                'id' => $point->id,
+                                'description' => $point->description,
+                                'photo_url' => $point->photo_path ? url(Storage::url($point->photo_path)) : null,
+                                'order' => $point->order,
+                                'day' => $point->day,
+                            ];
+                        }),
+                    ] : null,
                 ];
             });
 

@@ -2,49 +2,22 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Route extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'user_id',
-        'start_location',
-        'start_date',
-        'start_time',
-        'days',
-        'slots',
-        'age_restriction',
-        'cost',
+        'description',
+        // other fields
     ];
 
-    // чтобы в JSON всегда был available_slots
-    protected $appends = ['available_slots'];
-
-    public function user()
+    public function excursions()
     {
-        return $this->belongsTo(User::class);
+        return $this->hasMany(Excursion::class);
     }
 
-    public function points()
+    public function routePoints()
     {
-        return $this->hasMany(RoutePoint::class)->orderBy('order');
+        return $this->hasMany(RoutePoint::class);
     }
-
-    public function bookings()
-    {
-        return $this->hasMany(Booking::class);
-    }
-
-    public function getAvailableSlotsAttribute()
-{
-    $bookedSlots = $this->bookings()
-        ->where('canceled', false)
-        ->sum('slots');
-
-    return max($this->slots - $bookedSlots, 0);
-}
-
 }

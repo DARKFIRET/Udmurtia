@@ -6,22 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class Booking extends Model
 {
-    protected $table = 'bookings';
-
     protected $fillable = [
-        'route_id',
+        'excursion_id', // Changed from route_id
         'user_id',
         'slots',
         'canceled',
     ];
 
-    protected $casts = [
-        'canceled' => 'boolean',
-    ];
-
-    public function route()
+    public function excursion()
     {
-        return $this->belongsTo(Route::class);
+        return $this->belongsTo(Excursion::class); // Changed from Route
     }
 
     public function user()

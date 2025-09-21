@@ -12,206 +12,148 @@ use Illuminate\Validation\ValidationException;
 
 class RouteController extends Controller
 {
-public function index()
-{
-    // eager load bookings to avoid N+1
-    $routes = Route::with(['points', 'bookings'])->get()->map(function ($route) {
-        // суммируем только не отменённые брони
-        $bookedSlots = $route->bookings->where('canceled', false)->sum('slots');
-        $availableSlots = max($route->slots - $bookedSlots, 0);
-
-        return [
-            'id'              => $route->id,
-            'start_location'  => $route->start_location,
-            'start_date'      => $route->start_date,
-            'start_time'      => $route->start_time,
-            'days'            => $route->days,
-            'slots'           => $route->slots,            // всего мест
-            'booked_slots'    => $bookedSlots,             // занято всеми пользователями
-            'available_slots' => $availableSlots,          // свободные места
-            'age_restriction' => $route->age_restriction,
-            'cost'            => $route->cost,
-            'created_at'      => $route->created_at,
-            'points'          => $route->points->map(function ($point) {
-                return [
-                    'id'          => $point->id,
-                    'description' => $point->description,
-                    'photo_url'   => $point->photo_path ? Storage::url($point->photo_path) : null,
-                    'order'       => $point->order,
-                ];
-            }),
-        ];
-    });
-
-    return response()->json(['routes' => $routes]);
-}
-
-
-
-    public function show($id)
+    public function index()
     {
-        try {
-            $route = Route::with('points')->findOrFail($id);
-            return response()->json([
+        $routes = Route::with('routePoints')->get()->map(function ($route) {
+            return [
                 'id' => $route->id,
-                'start_location' => $route->start_location,
-                'start_date' => $route->start_date,
-                'start_time' => $route->start_time,
-                'days' => $route->days,
-                'slots' => $route->slots,
-                'age_restriction' => $route->age_restriction,
-                'cost' => $route->cost,
-                'created_at' => $route->created_at,
-                'points' => $route->points->map(function ($point) {
+                'description' => $route->description,
+                'route_points' => $route->routePoints->map(function ($point) {
                     return [
                         'id' => $point->id,
                         'description' => $point->description,
                         'photo_url' => $point->photo_path ? Storage::url($point->photo_path) : null,
                         'order' => $point->order,
+                        'day' => $point->day,
                     ];
                 }),
+                'created_at' => $route->created_at,
+                'updated_at' => $route->updated_at,
+            ];
+        });
+
+        return response()->json(['routes' => $routes]);
+    }
+
+    public function show($id)
+    {
+        try {
+            $route = Route::with('routePoints')->findOrFail($id);
+            return response()->json([
+                'id' => $route->id,
+                'description' => $route->description,
+                'route_points' => $route->routePoints->map(function ($point) {
+                    return [
+                        'id' => $point->id,
+                        'description' => $point->description,
+                        'photo_url' => $point->photo_path ? Storage::url($point->photo_path) : null,
+                        'order' => $point->order,
+                        'day' => $point->day,
+                    ];
+                }),
+                'created_at' => $route->created_at,
+                'updated_at' => $route->updated_at,
             ]);
         } catch (\Exception $e) {
+            \Log::error('Route not found', ['error' => $e->getMessage(), 'id' => $id]);
             return response()->json(['message' => 'Route not found', 'error' => $e->getMessage()], 404);
         }
     }
 
     public function store(Request $request)
     {
-        if (!Auth::user()->is_admin) {
+        if (!Auth::check() || !Auth::user()->is_admin) {
+            \Log::warning('Unauthorized access attempt', ['user' => Auth::id(), 'is_admin' => Auth::user()->is_admin ?? false]);
             return response()->json(['message' => 'Unauthorized: Admin access required'], 403);
         }
 
         try {
             $validated = $request->validate([
-                'start_location' => 'required|string|max:255',
-                'start_date' => 'required|date',
-                'start_time' => 'required|date_format:H:i',
-                'days' => 'required|integer|min:1',
-                'slots' => 'sometimes|integer|min:1',
-                'age_restriction' => 'required|integer|min:0',
-                'cost' => 'required|numeric|min:0',
-                'points' => 'required|array|min:1',
-                'points.*.description' => 'nullable|string|max:255',
-                'points.*.photo' => 'nullable|file|image|mimes:png,jpg|max:2048',
-                'points.*.order' => 'required|integer|min:0',
+                'description' => 'required|string|max:1000',
+                'route_points' => 'required|array',
+                'route_points.*' => 'exists:route_points,id',
             ]);
+
+            \Log::info('POST Request Data:', $request->all());
 
             $route = Route::create([
-                'user_id' => Auth::id(),
-                'start_location' => $request->start_location,
-                'start_date' => $request->start_date,
-                'start_time' => $request->start_time,
-                'days' => $request->days,
-                'slots' => $request->slots ?? 10,
-                'age_restriction' => $request->age_restriction,
-                'cost' => $request->cost,
+                'description' => $validated['description'],
             ]);
 
-            foreach ($request->points as $pointData) {
-                $photoPath = null;
-                if (isset($pointData['photo'])) {
-                    $photoPath = $pointData['photo']->store('route_points', 'public');
-                }
-
-                RoutePoint::create([
-                    'route_id' => $route->id,
-                    'description' => $pointData['description'] ?? null,
-                    'photo_path' => $photoPath,
-                    'order' => $pointData['order'],
-                ]);
-            }
+            $route->routePoints()->attach($validated['route_points']);
 
             return response()->json([
                 'message' => 'Route created',
-                'route' => $route->load('points'),
+                'route' => [
+                    'id' => $route->id,
+                    'description' => $route->description,
+                    'route_points' => $route->routePoints->map(function ($point) {
+                        return [
+                            'id' => $point->id,
+                            'description' => $point->description,
+                            'photo_url' => $point->photo_path ? Storage::url($point->photo_path) : null,
+                            'order' => $point->order,
+                            'day' => $point->day,
+                        ];
+                    }),
+                    'created_at' => $route->created_at,
+                    'updated_at' => $route->updated_at,
+                ],
             ], 201);
         } catch (ValidationException $e) {
+            \Log::error('Validation Error:', $e->errors());
             return response()->json(['errors' => $e->errors()], 422);
         } catch (\Exception $e) {
+            \Log::error('Creation Failed:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return response()->json(['message' => 'Creation failed', 'error' => $e->getMessage()], 500);
         }
     }
 
     public function update(Request $request, $id)
     {
-        if (!Auth::user()->is_admin) {
+        if (!Auth::check() || !Auth::user()->is_admin) {
+            \Log::warning('Unauthorized access attempt', ['user' => Auth::id(), 'is_admin' => Auth::user()->is_admin ?? false]);
             return response()->json(['message' => 'Unauthorized: Admin access required'], 403);
         }
 
         try {
             $route = Route::findOrFail($id);
 
-            // Логируем входящий запрос для отладки
             \Log::info('PUT Request Data:', $request->all());
-            \Log::info('All Files:', $request->allFiles());
 
             $validated = $request->validate([
-                'start_location' => 'sometimes|string|max:255',
-                'start_date' => 'sometimes|date',
-                'start_time' => 'sometimes|date_format:H:i',
-                'days' => 'sometimes|integer|min:1',
-                'slots' => 'sometimes|integer|min:1',
-                'age_restriction' => 'sometimes|integer|min:0',
-                'cost' => 'sometimes|numeric|min:0',
-                'points' => 'sometimes|array',
-                'points.*.description' => 'nullable|string|max:255',
-                'points.*.photo' => 'nullable|file|image|mimes:png,jpg|max:2048',
-                'points.*.order' => 'sometimes|integer|min:0',
+                'description' => 'sometimes|string|max:1000',
+                'route_points' => 'sometimes|array',
+                'route_points.*' => 'exists:route_points,id',
             ]);
 
-            \Log::info('Validated Data:', $validated);
-
-            $updates = array_diff_key($validated, array_flip(['points']));
-            if (!empty($updates)) {
-                $bookedSlots = $route->bookings()->where('canceled', false)->sum('slots');
-                if (isset($updates['slots']) && $updates['slots'] < $bookedSlots) {
-                    return response()->json(['message' => 'New slots count cannot be less than booked slots'], 400);
-                }
-                \Log::info('Updates Applied:', $updates);
-                $route->update($updates);
-            } else {
-                \Log::warning('No updates to apply');
+            $data = [];
+            if (isset($validated['description'])) {
+                $data['description'] = $validated['description'];
             }
+            $route->update($data);
 
-            if ($request->has('points')) {
-                \Log::info('Processing points data:', $request->input('points'));
-                $existingPoints = $route->points->keyBy('order');
-                foreach ($route->points as $point) {
-                    if ($point->photo_path) {
-                        Storage::disk('public')->delete($point->photo_path);
-                    }
-                }
-                $route->points()->delete();
-
-                $pointsData = $request->input('points', []);
-                foreach ($pointsData as $index => $pointData) {
-                    $photoPath = null;
-                    $photoFiles = $request->allFiles();
-                    $photoKey = "points.{$index}.photo";
-                    if (isset($photoFiles[$photoKey]) && $photoFiles[$photoKey]->isValid()) {
-                        $photoPath = $photoFiles[$photoKey]->store('route_points', 'public');
-                        \Log::info("Photo stored at: {$photoPath}");
-                    } elseif (isset($pointData['photo']) && is_string($pointData['photo'])) {
-                        $photoPath = $pointData['photo'];
-                    } elseif (isset($existingPoints[$pointData['order']])) {
-                        $photoPath = $existingPoints[$pointData['order']]->photo_path;
-                    }
-
-                    RoutePoint::create([
-                        'route_id' => $route->id,
-                        'description' => $pointData['description'] ?? null,
-                        'photo_path' => $photoPath,
-                        'order' => $pointData['order'] ?? 0,
-                    ]);
-                }
-            } else {
-                \Log::warning('No points provided for update');
+            if (isset($validated['route_points'])) {
+                $route->routePoints()->sync($validated['route_points']);
             }
 
             return response()->json([
                 'message' => 'Route updated',
-                'route' => $route->load('points'),
+                'route' => [
+                    'id' => $route->id,
+                    'description' => $route->description,
+                    'route_points' => $route->routePoints->map(function ($point) {
+                        return [
+                            'id' => $point->id,
+                            'description' => $point->description,
+                            'photo_url' => $point->photo_path ? Storage::url($point->photo_path) : null,
+                            'order' => $point->order,
+                            'day' => $point->day,
+                        ];
+                    }),
+                    'created_at' => $route->created_at,
+                    'updated_at' => $route->updated_at,
+                ],
             ]);
         } catch (ValidationException $e) {
             \Log::error('Validation Error:', $e->errors());
@@ -222,173 +164,21 @@ public function index()
         }
     }
 
-public function patch(Request $request, $id)
-{
-    if (!Auth::user()->is_admin) {
-        return response()->json(['message' => 'Unauthorized: Admin access required'], 403);
-    }
-
-    try {
-        $route = Route::findOrFail($id);
-
-        \Log::info('PATCH Request data:', [$request->all()]);
-        \Log::info('PATCH Request files:', [$request->allFiles()]);
-
-        $validated = $request->validate([
-            'start_location'   => 'sometimes|string|max:255',
-            'start_date'       => 'sometimes|date',
-            'start_time'       => 'sometimes|date_format:H:i',
-            'days'             => 'sometimes|integer|min:1',
-            'slots'            => 'sometimes|integer|min:1',
-            'age_restriction'  => 'sometimes|integer|min:0',
-            'cost'             => 'sometimes|numeric|min:0',
-            'points'                   => 'sometimes|array',
-            'points.*.id'              => 'sometimes|integer|exists:route_points,id',
-            'points.*.description'     => 'nullable|string|max:255',
-            'points.*.photo'           => 'nullable',
-            'points.*.order'           => 'sometimes|integer|min:0',
-        ]);
-
-        // Обновление маршрута
-        $updates = array_diff_key($validated, array_flip(['points']));
-        if (!empty($updates)) {
-            $bookedSlots = $route->bookings()->where('canceled', false)->sum('slots');
-            if (isset($updates['slots']) && $updates['slots'] < $bookedSlots) {
-                return response()->json(['message' => 'New slots count cannot be less than booked slots'], 400);
-            }
-            $route->update($updates);
-        }
-
-        // Обновление точек
-        if ($request->has('points')) {
-            $pointsData = $request->input('points', []);
-            $filesData  = $request->allFiles();
-            $existingPoints = $route->points->values(); // переиндексация по порядку
-
-            foreach ($pointsData as $index => $pointData) {
-                $photoPath = null;
-
-                // Находим существующую точку
-                $existingPoint = null;
-                if (isset($pointData['id'])) {
-                    $existingPoint = $route->points->firstWhere('id', $pointData['id']);
-                } elseif (isset($pointData['order'])) {
-                    $existingPoint = $route->points->firstWhere('order', $pointData['order']);
-                } elseif (isset($existingPoints[$index])) {
-                    // fallback: по индексу, если нет id и order
-                    $existingPoint = $existingPoints[$index];
-                }
-
-                // Файл
-                $photoFile = $filesData['points'][$index]['photo'] ?? $request->file("points.{$index}.photo");
-
-                if ($photoFile instanceof \Illuminate\Http\UploadedFile && $photoFile->isValid()) {
-                    $photoPath = $photoFile->store('route_points', 'public');
-                    \Log::info("Photo stored at:", [$photoPath]);
-                } elseif (isset($pointData['photo']) && is_string($pointData['photo']) && $pointData['photo'] !== '') {
-                    $photoPath = $pointData['photo'];
-                } elseif ($existingPoint) {
-                    $photoPath = $existingPoint->photo_path;
-                }
-
-                if ($existingPoint) {
-                    $existingPoint->update([
-                        'description' => $pointData['description'] ?? $existingPoint->description,
-                        'photo_path'  => $photoPath,
-                        'order'       => $pointData['order'] ?? $existingPoint->order,
-                    ]);
-                } else {
-                    RoutePoint::create([
-                        'route_id'    => $route->id,
-                        'description' => $pointData['description'] ?? null,
-                        'photo_path'  => $photoPath,
-                        'order'       => $pointData['order'] ?? $index,
-                    ]);
-                }
-            }
-        }
-
-        return response()->json([
-            'message' => 'Route patched',
-            'route'   => $route->load('points'),
-        ]);
-    } catch (ValidationException $e) {
-        return response()->json(['errors' => $e->errors()], 422);
-    } catch (\Exception $e) {
-        \Log::error('Patch failed', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-        return response()->json(['message' => 'Patch failed', 'error' => $e->getMessage()], 500);
-    }
-}
-
-
-
-
-
-
-
     public function destroy($id)
     {
-        if (!Auth::user()->is_admin) {
+        if (!Auth::check() || !Auth::user()->is_admin) {
+            \Log::warning('Unauthorized access attempt', ['user' => Auth::id(), 'is_admin' => Auth::user()->is_admin ?? false]);
             return response()->json(['message' => 'Unauthorized: Admin access required'], 403);
         }
 
         try {
             $route = Route::findOrFail($id);
-
-            foreach ($route->points as $point) {
-                if ($point->photo_path) {
-                    Storage::disk('public')->delete($point->photo_path);
-                }
-            }
-
             $route->delete();
 
             return response()->json(['message' => 'Route deleted']);
         } catch (\Exception $e) {
+            \Log::error('Deletion Failed:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return response()->json(['message' => 'Deletion failed', 'error' => $e->getMessage()], 500);
         }
     }
-
-    /**
-     * Поиск маршрутов по ключевому слову
-     */
-public function search(Request $request)
-{
-    $validated = $request->validate([
-        'title' => 'required|string|max:255',
-    ]);
-
-    $title = strtolower($validated['title']); // строка поиска
-
-    $routes = Route::with('points')
-        ->whereRaw('LOWER(start_location) LIKE ?', ["%{$title}%"])
-        ->orWhereHas('points', function ($query) use ($title) {
-            $query->whereRaw('LOWER(description) LIKE ?', ["%{$title}%"]);
-        })
-        ->get()
-        ->map(function ($route) {
-            return [
-                'id'              => $route->id,
-                'start_location'  => $route->start_location,
-                'start_date'      => $route->start_date,
-                'start_time'      => $route->start_time,
-                'days'            => $route->days,
-                'slots'           => $route->slots,
-                'age_restriction' => $route->age_restriction,
-                'cost'            => $route->cost,
-                'created_at'      => $route->created_at,
-                'points'          => $route->points->map(function ($point) {
-                    return [
-                        'id'          => $point->id,
-                        'description' => $point->description,
-                        'photo_url'   => $point->photo_path ? Storage::url($point->photo_path) : null,
-                        'order'       => $point->order,
-                    ];
-                }),
-            ];
-        });
-
-    return response()->json(['routes' => $routes]);
-}
-
 }
