@@ -23,11 +23,13 @@ interface UserInfo {
 }
 
 interface Booking {
-  route_id: number;
-  start_location: string;
+  excursion_id: number;
+  start_point: string;
   start_date: string;
   start_time: string;
   slots_booked: number;
+  discount_price_per_slot: number;
+  total_cost: number;
 }
 
 const Profile = () => {
@@ -45,10 +47,11 @@ const Profile = () => {
         ]);
 
         const user = userResponse.data.data || userResponse.data;
-        const bookings = bookingsResponse.data.bookings || bookingsResponse.data;
+        const bookingsData =
+          bookingsResponse.data.bookings || bookingsResponse.data;
 
         setUserInfo(user);
-        setBookings(Array.isArray(bookings) ? bookings : []);
+        setBookings(Array.isArray(bookingsData) ? bookingsData : []);
       } catch (error) {
         console.error("Error fetching user data:", error);
       } finally {
@@ -59,11 +62,13 @@ const Profile = () => {
     fetchUserData();
   }, []);
 
-  const handleCancelBooking = async (routeId: number) => {
+  const handleCancelBooking = async (excursionId: number) => {
     try {
-      setCancellingId(routeId);
-      await api.post(`/routes/${routeId}/cancel`);
-      setBookings((prev) => prev.filter((b) => b.route_id !== routeId));
+      setCancellingId(excursionId);
+      await api.post(`/excursions/${excursionId}/cancel`);
+      setBookings((prev) =>
+        prev.filter((b) => b.excursion_id !== excursionId)
+      );
     } catch (error) {
       console.error("Error cancelling booking:", error);
     } finally {
@@ -141,20 +146,21 @@ const Profile = () => {
                     <TableHead>Локация</TableHead>
                     <TableHead>Дата и время начала</TableHead>
                     <TableHead>Количество мест</TableHead>
+                    <TableHead>Стоимость</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {bookings.map((booking, i) => (
                     <motion.tr
-                      key={booking.route_id}
+                      key={booking.excursion_id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.4, delay: i * 0.1 }}
                       className="hover:bg-gray-50"
                     >
                       <TableCell className="font-medium">
-                        {booking.start_location}
+                        {booking.start_point}
                       </TableCell>
                       <TableCell>
                         {format(
@@ -163,15 +169,20 @@ const Profile = () => {
                         )}
                       </TableCell>
                       <TableCell>{booking.slots_booked}</TableCell>
+                      <TableCell>
+                        {booking.total_cost.toLocaleString("ru-RU")} ₽
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => handleCancelBooking(booking.route_id)}
-                          disabled={cancellingId === booking.route_id}
+                          onClick={() =>
+                            handleCancelBooking(booking.excursion_id)
+                          }
+                          disabled={cancellingId === booking.excursion_id}
                           className="transition-transform hover:scale-105"
                         >
-                          {cancellingId === booking.route_id
+                          {cancellingId === booking.excursion_id
                             ? "Отмена..."
                             : "Отменить"}
                         </Button>

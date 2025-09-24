@@ -16,6 +16,7 @@ return new class extends Migration
             $table->integer('all_days'); // Общее количество дней
             $table->integer('all_people'); // Общее количество людей
             $table->integer('age_limit'); // Ограничение по возрасту
+            $table->float('cost'); // Цена
             $table->foreignId('route_id')->constrained()->onDelete('cascade'); // Связь с маршрутом
             $table->timestamps();
         });

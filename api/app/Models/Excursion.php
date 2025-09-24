@@ -14,6 +14,7 @@ class Excursion extends Model
         'all_people',
         'age_limit',
         'route_id',
+        'cost',
     ];
 
     public function route()

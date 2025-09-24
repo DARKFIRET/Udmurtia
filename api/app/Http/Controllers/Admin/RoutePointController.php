@@ -27,7 +27,6 @@ class RoutePointController extends Controller
                 'photo_url' => $routePoint->photo_path ? Storage::url($routePoint->photo_path) : null,
                 'order' => $routePoint->order,
                 'route_id' => $routePoint->route_id,
-                'day' => $routePoint->day,
             ]);
         } catch (\Exception $e) {
             \Log::error('Route point not found', ['error' => $e->getMessage(), 'id' => $id]);
@@ -48,7 +47,6 @@ class RoutePointController extends Controller
                 'photo' => 'nullable|file|image|mimes:jpeg,png,jpg|max:2048',
                 'order' => 'nullable|integer|min:0',
                 'route_id' => 'nullable|exists:routes,id',
-                'day' => 'nullable|integer|min:0',
             ]);
 
             \Log::info('POST Request Data:', $request->all());
@@ -58,7 +56,6 @@ class RoutePointController extends Controller
                 'description' => $validated['description'],
                 'order' => $validated['order'] ?? (RoutePoint::max('order') + 1 ?? 0),
                 'route_id' => $validated['route_id'] ?? null,
-                'day' => $validated['day'] ?? null,
             ];
 
             $photoPath = null;
@@ -83,7 +80,6 @@ class RoutePointController extends Controller
                     'photo_url' => $photoPath ? Storage::url($photoPath) : null,
                     'order' => $routePoint->order,
                     'route_id' => $routePoint->route_id,
-                    'day' => $routePoint->day,
                 ],
             ], 201);
         } catch (ValidationException $e) {
@@ -113,14 +109,12 @@ class RoutePointController extends Controller
                 'photo' => 'nullable|file|image|mimes:jpeg,png,jpg|max:2048',
                 'order' => 'nullable|integer|min:0',
                 'route_id' => 'nullable|exists:routes,id',
-                'day' => 'nullable|integer|min:0',
             ]);
 
             $data = array_filter([
                 'description' => $validated['description'] ?? $routePoint->description,
                 'order' => $validated['order'] ?? $routePoint->order,
                 'route_id' => $validated['route_id'] ?? $routePoint->route_id,
-                'day' => $validated['day'] ?? $routePoint->day,
             ]);
 
             if ($request->hasFile('photo')) {
@@ -142,7 +136,6 @@ class RoutePointController extends Controller
                     'photo_url' => $routePoint->photo_path ? Storage::url($routePoint->photo_path) : null,
                     'order' => $routePoint->order,
                     'route_id' => $routePoint->route_id,
-                    'day' => $routePoint->day,
                 ],
             ]);
         } catch (ValidationException $e) {

@@ -14,7 +14,6 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->string('photo_path')->nullable();
             $table->integer('order')->nullable();
-            $table->integer('day')->nullable();
             $table->timestamps();
         });
     }

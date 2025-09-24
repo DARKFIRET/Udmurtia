@@ -28,7 +28,7 @@ Route::get('/photos', [PhotoController::class, 'getPhotos']);
 Route::get('/photos/{id}', [PhotoController::class, 'getPhoto']);
 Route::get('/routes', [RouteController::class, 'index']);
 Route::get('/routes/{id}', [RouteController::class, 'show']);
-Route::post('/routes/search', [RouteController::class, 'search']);
+Route::post('/routes/search', [ExcursionController::class, 'search']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/photos', [PhotoController::class, 'upload']);
@@ -40,8 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
 Route::get('/udmurtia', [UdmurtiaController::class, 'get']); // Получение информации
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/udmurtia', [UdmurtiaController::class, 'store']); // Создание/перезапись
-    Route::patch('/udmurtia', [UdmurtiaController::class, 'patch']); // Частичное обновление
+
 });
 
 // __________________________________________________________________
@@ -67,6 +66,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/excursions', [ExcursionController::class, 'store']);
         Route::put('/excursions/{id}', [ExcursionController::class, 'update']);
         Route::delete('/excursions/{id}', [ExcursionController::class, 'destroy']);
+
+        Route::post('/udmurtia', [UdmurtiaController::class, 'store']); // Создание/перезапись
+        Route::patch('/udmurtia', [UdmurtiaController::class, 'patch']); // Частичное обновление
     });
 });
 Route::get('/admin/routes', [RouteController::class, 'index']);

@@ -28,7 +28,7 @@ class BookingController extends Controller
 
         $excursion = Excursion::findOrFail($excursionId);
 
-        // Считаем доступные слоты (предполагаем, что all_people на экскурсии — это максимум слотов)
+        // Считаем доступные слоты
         $bookedSlots = $excursion->bookings()->where('canceled', false)->sum('slots');
         $availableSlots = $excursion->all_people - $bookedSlots;
 
@@ -92,7 +92,7 @@ class BookingController extends Controller
 
         $excursion = Excursion::findOrFail($excursionId);
 
-        // Проверка — можно ли отменять (используем start_date из экскурсии)
+        // Проверка — можно ли отменять
         if (now()->diffInDays(\Carbon\Carbon::parse($excursion->start_date), false) < 7) {
             return response()->json(['message' => 'Cancellation not allowed less than 7 days before start'], 403);
         }
@@ -149,17 +149,25 @@ class BookingController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $bookings = Booking::with('excursion.route.routePoints') // Updated to include route and routePoints
+        $bookings = Booking::with('excursion.route.routePoints')
             ->where('user_id', $user->id)
             ->where('canceled', false)
             ->get()
             ->map(function ($booking) {
+                $bookedSlots = $booking->slots;
+                $totalSlots = $booking->excursion->all_people;
+                $allBookedSlots = $booking->excursion->bookings()->where('canceled', false)->sum('slots');
+                $discountPricePerSlot = $this->calculateDiscountPrice($booking->excursion->cost, $bookedSlots, $allBookedSlots, $totalSlots);
+                $totalCost = $discountPricePerSlot * $bookedSlots;
+
                 return [
                     'excursion_id' => $booking->excursion_id,
                     'start_point' => $booking->excursion->start_point,
                     'start_date' => $booking->excursion->start_date,
                     'start_time' => $booking->excursion->start_time,
-                    'slots_booked' => $booking->slots,
+                    'slots_booked' => $bookedSlots,
+                    'discount_price_per_slot' => $discountPricePerSlot,
+                    'total_cost' => $totalCost,
                     'route' => $booking->excursion->route ? [
                         'id' => $booking->excursion->route->id,
                         'description' => $booking->excursion->route->description,
@@ -176,6 +184,42 @@ class BookingController extends Controller
                 ];
             });
 
-        return response()->json(['bookings' => $bookings]);
+        // Вычисляем общую стоимость всех броней
+        $totalCostAllBookings = $bookings->sum(function ($booking) {
+            $totalSlots = $booking['excursion_id'] ? Excursion::find($booking['excursion_id'])->all_people : 0;
+            $allBookedSlots = Booking::where('excursion_id', $booking['excursion_id'])->where('canceled', false)->sum('slots');
+            $discountPricePerSlot = $this->calculateDiscountPrice(Excursion::find($booking['excursion_id'])->cost, $booking['slots_booked'], $allBookedSlots, $totalSlots);
+            return $discountPricePerSlot * $booking['slots_booked'];
+        });
+
+        return response()->json([
+            'bookings' => $bookings,
+            'total_cost_all_bookings' => $totalCostAllBookings,
+        ]);
+    }
+
+    private function calculateDiscountPrice($cost, $slotsBooked, $allBookedSlots, $totalSlots)
+    {
+        $availableSlots = max(0, $totalSlots - $allBookedSlots);
+        $basePrice = $cost;
+
+        // Определяем пороги для скидок
+        $firstThreshold = $totalSlots * 0.3; // 30% от общего числа мест с 25% скидкой
+        $secondThreshold = $totalSlots * 0.5; // 50% от общего числа мест с 10% скидкой
+
+        $remainingSlotsWithDiscount = min($secondThreshold - $allBookedSlots + $slotsBooked, $slotsBooked);
+        $slotsWith25Discount = min($firstThreshold - ($allBookedSlots - $slotsBooked), $slotsBooked);
+        $slotsWith10Discount = max(0, min($remainingSlotsWithDiscount - $slotsWith25Discount, $slotsBooked - $slotsWith25Discount));
+        $slotsWithoutDiscount = max(0, $slotsBooked - $slotsWith25Discount - $slotsWith10Discount);
+
+        // Расчёт общей стоимости для забронированных слотов
+        $totalCost = ($slotsWith25Discount * $basePrice * 0.75) + // 25% скидка
+                     ($slotsWith10Discount * $basePrice * 0.90) + // 10% скидка
+                     ($slotsWithoutDiscount * $basePrice);       // Без скидки
+
+        // Средняя цена за слот
+        $discountPricePerSlot = $slotsBooked > 0 ? $totalCost / $slotsBooked : $basePrice;
+
+        return $discountPricePerSlot;
     }
 }

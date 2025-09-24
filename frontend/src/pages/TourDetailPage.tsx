@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Card,
@@ -28,129 +28,172 @@ import {
   DollarSign,
 } from "lucide-react";
 import { format } from "date-fns";
+import axios from "axios";
 
-interface TourPoint {
-  id: number;
-  photo_url: string;
+interface RoutePoint {
   description: string;
+  photo_url: string;
+  order: number;
+  day: number | null;
 }
 
-interface TourDetail {
+interface Excursion {
   id: number;
-  start_location: string;
+  start_point: string;
   start_date: string;
   start_time: string;
-  days: number;
-  slots: number;
-  age_restriction: number;
-  cost: number;
-  points: TourPoint[];
+  all_days: number;
+  all_people: number;
+  age_limit: number;
+  cost?: number; // базовая цена (иногда называется cost)
+  discount_price?: number; // fallback, если cost отсутствует
+  available_slots: number;
+  route: {
+    id: number;
+    description: string;
+    route_points: RoutePoint[];
+  };
 }
 
 const TourDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const [participantCount, setParticipantCount] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [tourData, setTourData] = useState<TourDetail>({
-    id: 1,
-    start_location: "Ижевск, Центральная площадь",
-    start_date: "2023-07-15",
-    start_time: "09:00:00",
-    days: 2,
-    slots: 15,
-    age_restriction: 12,
-    cost: 2500,
-    points: [
-      {
-        id: 1,
-        photo_url: "/uploads/tours/izhevsk-1.jpg",
-        description: "Центральная площадь Ижевска",
-      },
-      {
-        id: 2,
-        photo_url: "/uploads/tours/izhevsk-2.jpg",
-        description: "Набережная Ижевского пруда",
-      },
-      {
-        id: 3,
-        photo_url: "/uploads/tours/izhevsk-3.jpg",
-        description: "Музей оружия",
-      },
-    ],
-  });
+  const [tourData, setTourData] = useState<Excursion | null>(null);
+  const [fetching, setFetching] = useState<boolean>(false);
 
-  // Format date for display
+  const fetchData = async () => {
+    setFetching(true);
+    try {
+      const res = await axios.get(`http://127.0.0.1:8000/api/excursions/${id}`);
+      // API ответ: экскурсия как объект (см. пример пользователя)
+      setTourData(res.data);
+      // ensure participantCount not exceeding available slots after refresh
+      const avail = res.data?.available_slots ?? 0;
+      setParticipantCount((prev) => Math.min(Math.max(prev, 1), Math.max(1, avail)));
+    } catch (e) {
+      console.error("Ошибка загрузки экскурсии:", e);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  if (!tourData) {
+    return <div>Loading...</div>;
+  }
+
+  // choose base price: prefer cost, fallback to discount_price
+  const basePrice = typeof tourData.cost === "number" ? tourData.cost : (tourData.discount_price ?? 0);
+  const totalSlots = tourData.all_people;
+  const availableSlots = tourData.available_slots;
+
   const formattedDate = () => {
     try {
-      const date = new Date(tourData.start_date);
-      return format(date, "dd.MM.yyyy");
-    } catch (e) {
+      return format(new Date(tourData.start_date), "dd.MM.yyyy");
+    } catch {
       return tourData.start_date;
     }
   };
 
-  // Calculate total cost
-  const totalCost = tourData.cost * participantCount;
+  /**
+   * Рассчёт поэтапной стоимости брони:
+   * - Для каждого бронируемого места берём текущий процент свободных мест (available / total)
+   * - В зависимости от диапазона применяем множитель:
+   *    >= 70% -> 0.75 (скидка 25%)
+   *    50%..69% -> 0.90 (скидка 10%)
+   *    < 50% -> 1.00
+   * - После "взятия" места available-- и продолжаем для следующего
+   */
+  const calculateTotalCost = (count: number) => {
+    let remainingAvailable = availableSlots;
+    let total = 0;
+    let breakdown = {
+      at75: 0,
+      at90: 0,
+      at100: 0,
+    };
 
-  // Handle booking submission
+    // guard: если totalSlots === 0, считаем все по полной цене (чтобы не делить на 0)
+    for (let i = 0; i < count; i++) {
+      const availabilityPercent = totalSlots > 0 ? (remainingAvailable / totalSlots) * 100 : 0;
+      let multiplier = 1;
+
+      if (availabilityPercent >= 70) {
+        multiplier = 0.75;
+        breakdown.at75 += 1;
+      } else if (availabilityPercent >= 50) {
+        multiplier = 0.9;
+        breakdown.at90 += 1;
+      } else {
+        multiplier = 1;
+        breakdown.at100 += 1;
+      }
+
+      total += basePrice * multiplier;
+      // reduce available (booking this slot)
+      remainingAvailable = Math.max(0, remainingAvailable - 1);
+    }
+
+    // round to 2 decimals
+    total = Math.round(total * 100) / 100;
+    return { total, breakdown };
+  };
+
+  const { total: computedTotal, breakdown } = useMemo(
+    () => calculateTotalCost(participantCount),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [participantCount, tourData] // recalc when participantCount or tourData changes
+  );
+
   const handleBooking = async () => {
-    if (participantCount < 1 || participantCount > tourData.slots) {
-      alert("Пожалуйста, выберите корректное количество участников");
+    if (participantCount < 1 || participantCount > availableSlots) {
+      alert("Пожалуйста, выберите корректное количество участников (не больше доступных мест).");
       return;
     }
 
     setIsLoading(true);
     try {
-      // Simulated API call
-      // In a real implementation, you would make an actual API call here
-      // const response = await fetch(`http://127.0.0.1:8000/api/routes/${id}/book`, {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     'Authorization': `Bearer ${localStorage.getItem('token')}`
-      //   },
-      //   body: JSON.stringify({ slots: participantCount })
-      // });
-      // const data = await response.json();
-
-      // Simulate API response delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
+      await axios.post(`http://127.0.0.1:8000/api/excursions/${id}/book`, {
+        slots: participantCount,
+      });
       alert("Бронирование успешно оформлено!");
-    } catch (error) {
-      console.error("Error booking tour:", error);
-      alert("Ошибка при бронировании. Пожалуйста, попробуйте снова.");
+      // обновляем данные экскурсии чтобы показать новое available_slots
+      await fetchData();
+    } catch (error: any) {
+      console.error("Ошибка бронирования:", error);
+      const msg = error?.response?.data?.message ?? "Ошибка при бронировании. Пожалуйста, попробуйте снова.";
+      alert(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const notEnoughSlots = participantCount > availableSlots;
+
   return (
     <div className="container mx-auto py-8 px-4 bg-background">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Tour Details Section */}
         <div className="lg:col-span-2">
-          {/* Photo Gallery */}
           <div className="mb-8">
             <Carousel className="w-full">
               <CarouselContent>
-                {tourData.points.map((point) => (
-                  <CarouselItem key={point.id}>
+                {tourData.route.route_points.map((point, idx) => (
+                  <CarouselItem key={point.order ?? idx}>
                     <div className="p-1">
                       <div className="overflow-hidden rounded-xl aspect-[16/9]">
                         <img
-                          src={`http://127.0.0.1:8000${point.photo_url}`}
+                          src={point.photo_url}
                           alt={point.description}
                           className="w-full h-full object-cover"
-                          onError={(e) => {
-                            // Fallback image if the tour image fails to load
-                            (e.target as HTMLImageElement).src =
-                              "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80";
-                          }}
                         />
                       </div>
                       <p className="text-sm text-center mt-2">
-                        {point.description}
+                        День {point.day ?? "—"}: {point.description}
                       </p>
                     </div>
                   </CarouselItem>
@@ -161,12 +204,9 @@ const TourDetailPage = () => {
             </Carousel>
           </div>
 
-          {/* Tour Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">
-                {tourData.start_location}
-              </CardTitle>
+              <CardTitle className="text-2xl">{tourData.start_point}</CardTitle>
               <CardDescription>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="outline" className="flex items-center gap-1">
@@ -181,95 +221,67 @@ const TourDetailPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">Место начала</p>
-                      <p className="text-sm text-muted-foreground">
-                        {tourData.start_location}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">Длительность</p>
-                      <p className="text-sm text-muted-foreground">
-                        {tourData.days}{" "}
-                        {tourData.days === 1
-                          ? "день"
-                          : tourData.days < 5
-                            ? "дня"
-                            : "дней"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">Свободные места</p>
-                      <p className="text-sm text-muted-foreground">
-                        {tourData.slots}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">
-                        Возрастное ограничение
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {tourData.age_restriction}+
-                      </p>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-muted-foreground" />
+                  <span>{tourData.start_point}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-muted-foreground" />
+                  <span>
+                    {tourData.all_days}{" "}
+                    {tourData.all_days === 1
+                      ? "день"
+                      : tourData.all_days < 5
+                      ? "дня"
+                      : "дней"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium">Свободных мест</p>
+                    <p className="text-sm text-muted-foreground">{availableSlots} из {totalSlots}</p>
                   </div>
                 </div>
-
-                <div className="pt-4 border-t">
-                  <h3 className="text-lg font-medium mb-2">
-                    Описание маршрута
-                  </h3>
-                  <p className="text-muted-foreground">
-                    Увлекательное путешествие по историческим и культурным
-                    местам Удмуртии. Вы посетите главные достопримечательности
-                    региона, познакомитесь с местными традициями и отведаете
-                    блюда национальной кухни.
-                  </p>
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-muted-foreground" />
+                  <span>Возраст: {tourData.age_limit}+</span>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Booking Form Section */}
         <div>
           <Card className="sticky top-4">
             <CardHeader>
               <CardTitle>Забронировать экскурсию</CardTitle>
               <CardDescription>
-                Стоимость: {tourData.cost} ₽ с человека
+                Стоимость (базовая): {basePrice.toLocaleString("ru-RU")} ₽ с человека
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="space-y-2">
+                <div>
                   <Label htmlFor="participants">Количество участников</Label>
                   <Input
                     id="participants"
                     type="number"
-                    min="1"
-                    max={tourData.slots}
+                    min={1}
+                    max={availableSlots}
                     value={participantCount}
-                    onChange={(e) =>
-                      setParticipantCount(parseInt(e.target.value) || 1)
-                    }
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10) || 1;
+                      setParticipantCount(Math.max(1, v));
+                    }}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Максимум: {tourData.slots} мест
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Доступно: {availableSlots} мест. Максимум: {availableSlots}
                   </p>
+                  {notEnoughSlots && (
+                    <p className="text-sm text-destructive mt-1">Недостаточно свободных мест</p>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t">
@@ -277,8 +289,17 @@ const TourDetailPage = () => {
                     <span className="font-medium">Итого:</span>
                     <span className="text-xl font-bold flex items-center">
                       <DollarSign className="h-5 w-5" />
-                      {totalCost} ₽
+                      {computedTotal.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₽
                     </span>
+                  </div>
+
+                  <div className="mt-3 text-sm text-muted-foreground">
+                    <div>Разбивка по тарифам (слотов):</div>
+                    <ul className="mt-1 ml-4 list-disc">
+                      <li>75% от цены: {breakdown.at75} шт.</li>
+                      <li>90% от цены: {breakdown.at90} шт.</li>
+                      <li>100% от цены: {breakdown.at100} шт.</li>
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -290,7 +311,7 @@ const TourDetailPage = () => {
                 disabled={
                   isLoading ||
                   participantCount < 1 ||
-                  participantCount > tourData.slots
+                  participantCount > availableSlots
                 }
               >
                 {isLoading ? "Оформление..." : "Забронировать"}

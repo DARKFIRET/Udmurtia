@@ -135,22 +135,22 @@ const Home: React.FC = () => {
   }, []);
 
   // Add this useEffect with other useEffects
-  React.useEffect(() => {
-    const fetchTours = async () => {
-      try {
-        const response = await fetch('http://127.0.0.1:8000/api/routes');
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        const data = await response.json();
-        setTours(data.routes);
-      } catch (error) {
-        console.error('Error fetching tours:', error);
-      }
-    };
+  // React.useEffect(() => {
+  //   const fetchTours = async () => {
+  //     try {
+  //       const response = await fetch('http://127.0.0.1:8000/api/routes');
+  //       if (!response.ok) {
+  //         throw new Error('Network response was not ok');
+  //       }
+  //       const data = await response.json();
+  //       setTours(data.routes);
+  //     } catch (error) {
+  //       console.error('Error fetching tours:', error);
+  //     }
+  //   };
 
-    fetchTours();
-  }, []);
+  //   fetchTours();
+  // }, []);
 
   // Featured tours (mock data)
   const featuredTours = [

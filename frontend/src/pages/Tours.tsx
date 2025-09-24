@@ -1,36 +1,43 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Clock, MapPin } from "lucide-react";
+import { Calendar, Clock, Users } from "lucide-react";
 import axios from "axios";
 
 interface RoutePoint {
-  id: number;
   description: string;
-  photo_url: string | null;
+  photo_url: string;
   order: number;
+  day: number;
 }
 
-interface TourRoute {
+interface Excursion {
   id: number;
-  start_location: string;
+  start_point: string;
   start_date: string;
   start_time: string;
-  cost: string;
-  points: RoutePoint[];
+  all_days: number;
+  all_people: number;
+  age_limit: number;
+  discount_price: number;
+  route: {
+    id: number;
+    description: string;
+    route_points: RoutePoint[];
+  };
 }
 
 const Tours = () => {
-  const [tours, setTours] = useState<TourRoute[]>([]);
+  const [tours, setTours] = useState<Excursion[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchTours = async () => {
       try {
-        const response = await axios.get('http://127.0.0.1:8000/api/routes');
-        setTours(response.data.routes);
+        const response = await axios.get("http://127.0.0.1:8000/api/excursions");
+        setTours(response.data.excursions);
       } catch (error) {
-        console.error('Error fetching tours:', error);
+        console.error("Error fetching excursions:", error);
       } finally {
         setLoading(false);
       }
@@ -52,15 +59,16 @@ const Tours = () => {
             <Card className="h-full hover:shadow-lg transition-shadow">
               <div className="h-48 overflow-hidden">
                 <img
-                  src={tour.points[0]?.photo_url 
-                    ? `http://127.0.0.1:8000${tour.points[0].photo_url}`
-                    : 'https://via.placeholder.com/400x300'}
-                  alt={tour.start_location}
+                  src={
+                    tour.route.route_points[0]?.photo_url ??
+                    "https://via.placeholder.com/400x300"
+                  }
+                  alt={tour.start_point}
                   className="w-full h-full object-cover"
                 />
               </div>
               <CardHeader>
-                <CardTitle>{tour.start_location}</CardTitle>
+                <CardTitle>{tour.start_point}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex justify-between items-center mb-4">
@@ -70,11 +78,15 @@ const Tours = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4" />
-                    <span>{tour.start_time}</span>
+                    <span>{tour.start_time.substring(0, 5)}</span>
                   </div>
                 </div>
-                <div className="text-lg font-bold">
-                  {Number(tour.cost).toLocaleString('ru-RU')} ₽
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  <span>{tour.all_people} мест</span>
+                </div>
+                <div className="text-lg font-bold mt-2">
+                  {tour.discount_price.toLocaleString("ru-RU")} ₽
                 </div>
               </CardContent>
             </Card>

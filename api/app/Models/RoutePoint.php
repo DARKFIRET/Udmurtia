@@ -11,7 +11,6 @@ class RoutePoint extends Model
         'description',
         'photo_path',
         'order',
-        'day',
     ];
 
     public function route()
@@ -21,5 +20,10 @@ class RoutePoint extends Model
     public function routes()
     {
         return $this->belongsToMany(Route::class, 'route_route_point');
+    }
+
+    public function routePointDays()
+    {
+        return $this->hasMany(RoutePointDay::class, 'route_point_id');
     }
 }
