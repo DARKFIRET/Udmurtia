@@ -60,6 +60,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::delete('/routes/{id}', [RouteController::class, 'destroy']);
 
         // RoutePoint routes
+        Route::get('/route-points', [RoutePointController::class, 'index']);
         Route::post('/route-points', [RoutePointController::class, 'store']);
         Route::put('/route-points/{id}', [RoutePointController::class, 'update']);
         Route::delete('/route-points/{id}', [RoutePointController::class, 'destroy']);

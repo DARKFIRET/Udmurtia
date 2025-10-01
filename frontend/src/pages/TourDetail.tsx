@@ -222,7 +222,6 @@ const TourDetail = () => {
               </div>
 
               <div className="text-lg font-bold flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
                 Итого: {total.toLocaleString("ru-RU")} ₽
               </div>
 
@@ -240,7 +239,8 @@ const TourDetail = () => {
                 )}
                 {breakdown.slotsWithoutDiscount > 0 && (
                   <p>
-                    {breakdown.slotsWithoutDiscount} × {tour.cost} ₽ (без скидки)
+                    {breakdown.slotsWithoutDiscount} × {tour.cost} ₽ (без
+                    скидки)
                   </p>
                 )}
               </div>

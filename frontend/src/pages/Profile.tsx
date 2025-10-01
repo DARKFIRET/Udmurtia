@@ -11,6 +11,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import api from "@/utils/api";
 import { motion } from "framer-motion";
 
@@ -36,8 +45,14 @@ const Profile = () => {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cancellingId, setCancellingId] = useState<number | null>(null);
 
+  // состояние для отмены
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [cancelSlots, setCancelSlots] = useState(1);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+
+  // загрузка профиля и броней
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -62,15 +77,37 @@ const Profile = () => {
     fetchUserData();
   }, []);
 
-  const handleCancelBooking = async (excursionId: number) => {
+  // открыть диалог отмены
+  const handleOpenCancelDialog = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setCancelSlots(1);
+    setOpenDialog(true);
+  };
+
+  // подтвердить отмену
+  const handleConfirmCancel = async () => {
+    if (!selectedBooking) return;
     try {
-      setCancellingId(excursionId);
-      await api.post(`/excursions/${excursionId}/cancel`);
+      setCancellingId(selectedBooking.excursion_id);
+
+      await api.patch(`/excursions/${selectedBooking.excursion_id}/cancel`, {
+        slots: cancelSlots,
+      });
+
+      // обновляем список броней
       setBookings((prev) =>
-        prev.filter((b) => b.excursion_id !== excursionId)
+        prev
+          .map((b) =>
+            b.excursion_id === selectedBooking.excursion_id
+              ? { ...b, slots_booked: b.slots_booked - cancelSlots }
+              : b
+          )
+          .filter((b) => b.slots_booked > 0)
       );
+
+      setOpenDialog(false);
     } catch (error) {
-      console.error("Error cancelling booking:", error);
+      console.error("Ошибка при отмене мест:", error);
     } finally {
       setCancellingId(null);
     }
@@ -101,7 +138,11 @@ const Profile = () => {
             </Avatar>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {[userInfo?.last_name, userInfo?.first_name, userInfo?.patronymic]
+                {[
+                  userInfo?.last_name,
+                  userInfo?.first_name,
+                  userInfo?.patronymic,
+                ]
                   .filter(Boolean)
                   .join(" ")}
               </h1>
@@ -131,13 +172,19 @@ const Profile = () => {
       >
         <Card className="shadow-xl border-0">
           <CardHeader>
-            <h2 className="text-2xl font-bold text-gray-900">Мои бронирования</h2>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Мои бронирования
+            </h2>
           </CardHeader>
           <CardContent>
             {bookings.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
-                <p className="text-lg font-medium">У вас пока нет бронирований</p>
-                <p className="text-sm">Забронируйте экскурсию и она появится здесь</p>
+                <p className="text-lg font-medium">
+                  У вас пока нет бронирований
+                </p>
+                <p className="text-sm">
+                  Забронируйте экскурсию и она появится здесь
+                </p>
               </div>
             ) : (
               <Table>
@@ -164,7 +211,9 @@ const Profile = () => {
                       </TableCell>
                       <TableCell>
                         {format(
-                          new Date(`${booking.start_date}T${booking.start_time}`),
+                          new Date(
+                            `${booking.start_date}T${booking.start_time}`
+                          ),
                           "dd.MM.yyyy HH:mm"
                         )}
                       </TableCell>
@@ -176,15 +225,11 @@ const Profile = () => {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() =>
-                            handleCancelBooking(booking.excursion_id)
-                          }
+                          onClick={() => handleOpenCancelDialog(booking)} // ✅ только открываем диалог
                           disabled={cancellingId === booking.excursion_id}
                           className="transition-transform hover:scale-105"
                         >
-                          {cancellingId === booking.excursion_id
-                            ? "Отмена..."
-                            : "Отменить"}
+                          Отменить
                         </Button>
                       </TableCell>
                     </motion.tr>
@@ -195,6 +240,42 @@ const Profile = () => {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* --- Диалог отмены --- */}
+      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Отмена бронирования</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <Label htmlFor="slots">Количество мест для отмены</Label>
+            <Input
+              id="slots"
+              type="number"
+              min={1}
+              max={selectedBooking?.slots_booked || 1}
+              value={cancelSlots}
+              onChange={(e) => setCancelSlots(Number(e.target.value))}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpenDialog(false)}>
+              Закрыть
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCancel}
+              disabled={cancellingId === selectedBooking?.excursion_id}
+            >
+              {cancellingId === selectedBooking?.excursion_id
+                ? "Отмена..."
+                : "Подтвердить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

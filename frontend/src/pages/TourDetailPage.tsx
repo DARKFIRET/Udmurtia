@@ -70,7 +70,9 @@ const TourDetailPage = () => {
       setTourData(res.data);
       // ensure participantCount not exceeding available slots after refresh
       const avail = res.data?.available_slots ?? 0;
-      setParticipantCount((prev) => Math.min(Math.max(prev, 1), Math.max(1, avail)));
+      setParticipantCount((prev) =>
+        Math.min(Math.max(prev, 1), Math.max(1, avail))
+      );
     } catch (e) {
       console.error("Ошибка загрузки экскурсии:", e);
     } finally {
@@ -88,7 +90,10 @@ const TourDetailPage = () => {
   }
 
   // choose base price: prefer cost, fallback to discount_price
-  const basePrice = typeof tourData.cost === "number" ? tourData.cost : (tourData.discount_price ?? 0);
+  const basePrice =
+    typeof tourData.cost === "number"
+      ? tourData.cost
+      : tourData.discount_price ?? 0;
   const totalSlots = tourData.all_people;
   const availableSlots = tourData.available_slots;
 
@@ -120,7 +125,8 @@ const TourDetailPage = () => {
 
     // guard: если totalSlots === 0, считаем все по полной цене (чтобы не делить на 0)
     for (let i = 0; i < count; i++) {
-      const availabilityPercent = totalSlots > 0 ? (remainingAvailable / totalSlots) * 100 : 0;
+      const availabilityPercent =
+        totalSlots > 0 ? (remainingAvailable / totalSlots) * 100 : 0;
       let multiplier = 1;
 
       if (availabilityPercent >= 70) {
@@ -152,7 +158,9 @@ const TourDetailPage = () => {
 
   const handleBooking = async () => {
     if (participantCount < 1 || participantCount > availableSlots) {
-      alert("Пожалуйста, выберите корректное количество участников (не больше доступных мест).");
+      alert(
+        "Пожалуйста, выберите корректное количество участников (не больше доступных мест)."
+      );
       return;
     }
 
@@ -166,7 +174,9 @@ const TourDetailPage = () => {
       await fetchData();
     } catch (error: any) {
       console.error("Ошибка бронирования:", error);
-      const msg = error?.response?.data?.message ?? "Ошибка при бронировании. Пожалуйста, попробуйте снова.";
+      const msg =
+        error?.response?.data?.message ??
+        "Ошибка при бронировании. Пожалуйста, попробуйте снова.";
       alert(msg);
     } finally {
       setIsLoading(false);
@@ -241,7 +251,9 @@ const TourDetailPage = () => {
                   <Users className="h-5 w-5 text-muted-foreground" />
                   <div>
                     <p className="text-sm font-medium">Свободных мест</p>
-                    <p className="text-sm text-muted-foreground">{availableSlots} из {totalSlots}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {availableSlots} из {totalSlots}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -258,7 +270,8 @@ const TourDetailPage = () => {
             <CardHeader>
               <CardTitle>Забронировать экскурсию</CardTitle>
               <CardDescription>
-                Стоимость (базовая): {basePrice.toLocaleString("ru-RU")} ₽ с человека
+                Стоимость (базовая): {basePrice.toLocaleString("ru-RU")} ₽ с
+                человека
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -280,7 +293,9 @@ const TourDetailPage = () => {
                     Доступно: {availableSlots} мест. Максимум: {availableSlots}
                   </p>
                   {notEnoughSlots && (
-                    <p className="text-sm text-destructive mt-1">Недостаточно свободных мест</p>
+                    <p className="text-sm text-destructive mt-1">
+                      Недостаточно свободных мест
+                    </p>
                   )}
                 </div>
 
@@ -288,8 +303,11 @@ const TourDetailPage = () => {
                   <div className="flex justify-between items-center">
                     <span className="font-medium">Итого:</span>
                     <span className="text-xl font-bold flex items-center">
-                      <DollarSign className="h-5 w-5" />
-                      {computedTotal.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ₽
+                      {computedTotal.toLocaleString("ru-RU", {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      ₽
                     </span>
                   </div>
 

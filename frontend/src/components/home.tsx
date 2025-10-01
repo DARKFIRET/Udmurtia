@@ -23,6 +23,7 @@ import {
   Clock,
   Landmark,
   Camera,
+  Users,
 } from "lucide-react";
 
 interface UdmurtiaInfo {
@@ -60,49 +61,58 @@ interface Photo {
   user_id: number;
 }
 
-// Add these interfaces at the top with other interfaces
-interface RoutePoint {
-  id: number;
+// Interfaces for excursions from API
+interface ExcursionRoutePoint {
   description: string;
-  photo_url: string | null;
+  photo_url: string;
   order: number;
+  day: number;
 }
 
-interface TourRoute {
+interface Excursion {
   id: number;
-  start_location: string;
+  start_point: string;
   start_date: string;
   start_time: string;
-  days: number;
-  slots: number;
-  age_restriction: number;
-  cost: string;
+  all_days: number;
+  all_people: number;
+  age_limit: number;
+  cost: number;
+  available_slots: number;
+  discount_price: number;
   created_at: string;
-  points: RoutePoint[];
+  updated_at: string;
+  route: {
+    id: number;
+    description: string;
+    route_points: ExcursionRoutePoint[];
+  };
 }
 
 const Home: React.FC = () => {
   const [udmurtiaInfo, setUdmurtiaInfo] = React.useState<UdmurtiaInfo | null>(
-    null,
+    null
   );
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
   const [featuredAttractions, setFeaturedAttractions] = React.useState<Photo[]>(
-    [],
+    []
   );
-  // Add this state near other useState declarations
-  const [tours, setTours] = React.useState<TourRoute[]>([]);
+  // Add this state for excursions
+  const [excursions, setExcursions] = React.useState<Excursion[]>([]);
+  const [excursionsLoading, setExcursionsLoading] =
+    React.useState<boolean>(true);
 
   React.useEffect(() => {
     const fetchUdmurtiaInfo = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://127.0.0.1:8000/api/udmurtia');
+        const response = await fetch("http://127.0.0.1:8000/api/udmurtia");
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          throw new Error("Network response was not ok");
         }
         const data = await response.json();
-        
+
         setUdmurtiaInfo({
           title: data.title,
           description: data.description,
@@ -120,71 +130,40 @@ const Home: React.FC = () => {
   React.useEffect(() => {
     const fetchPhotos = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:8000/api/photos');
+        const response = await fetch("http://127.0.0.1:8000/api/photos");
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          throw new Error("Network response was not ok");
         }
         const data = await response.json();
         setFeaturedAttractions(data.photos);
       } catch (error) {
-        console.error('Error fetching photos:', error);
+        console.error("Error fetching photos:", error);
       }
     };
 
     fetchPhotos();
   }, []);
 
-  // Add this useEffect with other useEffects
-  // React.useEffect(() => {
-  //   const fetchTours = async () => {
-  //     try {
-  //       const response = await fetch('http://127.0.0.1:8000/api/routes');
-  //       if (!response.ok) {
-  //         throw new Error('Network response was not ok');
-  //       }
-  //       const data = await response.json();
-  //       setTours(data.routes);
-  //     } catch (error) {
-  //       console.error('Error fetching tours:', error);
-  //     }
-  //   };
+  // Add this useEffect to fetch excursions
+  React.useEffect(() => {
+    const fetchExcursions = async () => {
+      try {
+        setExcursionsLoading(true);
+        const response = await fetch("http://127.0.0.1:8000/api/excursions");
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+        const data = await response.json();
+        setExcursions(data.excursions);
+      } catch (error) {
+        console.error("Error fetching excursions:", error);
+      } finally {
+        setExcursionsLoading(false);
+      }
+    };
 
-  //   fetchTours();
-  // }, []);
-
-  // Featured tours (mock data)
-  const featuredTours = [
-    {
-      id: 1,
-      name: "Ижевск - оружейная столица",
-      start_location: "Центральная площадь Ижевска",
-      start_date: "2023-07-15",
-      start_time: "10:00",
-      cost: 1500,
-      imageUrl:
-        "https://images.unsplash.com/photo-1569949381669-ecf31ae8e613?w=800&q=80",
-    },
-    {
-      id: 2,
-      name: "По следам удмуртских легенд",
-      start_location: "Деревня Карамас-Пельга",
-      start_date: "2023-07-20",
-      start_time: "09:00",
-      cost: 2500,
-      imageUrl:
-        "https://images.unsplash.com/photo-1528702748617-c64d49f918af?w=800&q=80",
-    },
-    {
-      id: 3,
-      name: "Воткинск - родина Чайковского",
-      start_location: "Музей-усадьба П.И. Чайковского",
-      start_date: "2023-07-25",
-      start_time: "11:00",
-      cost: 1800,
-      imageUrl:
-        "https://images.unsplash.com/photo-1577334928618-2f6a516b0831?w=800&q=80",
-    },
-  ];
+    fetchExcursions();
+  }, []);
 
   if (loading) {
     return (
@@ -322,67 +301,82 @@ const Home: React.FC = () => {
             </Button>
           </div>
 
-          <Carousel className="w-full">
-            <CarouselContent>
-              {tours.map((tour) => (
-                <CarouselItem
-                  key={tour.id}
-                  className="md:basis-1/2 lg:basis-1/3"
-                >
-                  <Card className="h-full">
-                    <div className="h-48 overflow-hidden">
-                      <img
-                        src={tour.points[0]?.photo_url 
-                          ? `http://127.0.0.1:8000${tour.points[0].photo_url}`
-                          : 'https://via.placeholder.com/400x300'}
-                        alt={tour.points[0]?.description || 'Tour image'}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <CardHeader>
-                      <CardTitle>{tour.start_location}</CardTitle>
-                      <CardDescription className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" /> {tour.start_location}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex justify-between text-sm">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {new Date(tour.start_date).toLocaleDateString(
-                              "ru-RU",
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span>{tour.start_time}</span>
-                        </div>
-                      </div>
-                      <div className="mt-2 text-sm">
-                        <span>Длительность: {tour.days} дн.</span>
-                        <span className="mx-2">•</span>
-                        <span>Мест: {tour.slots}</span>
-                      </div>
-                      <div className="mt-4 font-semibold">
-                        {Number(tour.cost).toLocaleString('ru-RU')} ₽
-                      </div>
-                    </CardContent>
-                    <CardFooter>
-                      <Button asChild className="w-full">
-                        <Link to={`/tours/${tour.id}`}>Забронировать</Link>
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-            <div className="hidden md:block">
-              <CarouselPrevious className="-left-4" />
-              <CarouselNext className="-right-4" />
+          {excursionsLoading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p className="mt-4 text-lg">Загрузка экскурсий...</p>
+              </div>
             </div>
-          </Carousel>
+          ) : excursions.length > 0 ? (
+            <Carousel className="w-full">
+              <CarouselContent>
+                {excursions.map((tour) => (
+                  <CarouselItem
+                    key={tour.id}
+                    className="md:basis-1/2 lg:basis-1/3"
+                  >
+                    <Card className="h-full">
+                      <div className="h-48 overflow-hidden">
+                        <img
+                          src={
+                            tour.route.route_points[0]?.photo_url ??
+                            "https://via.placeholder.com/400x300"
+                          }
+                          alt={tour.start_point}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <CardHeader>
+                        <CardTitle>{tour.start_point}</CardTitle>
+                        <CardDescription className="flex items-center gap-1">
+                          <MapPin className="h-4 w-4" /> {tour.start_point}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            <span>
+                              {new Date(tour.start_date).toLocaleDateString(
+                                "ru-RU"
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            <span>{tour.start_time.substring(0, 5)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          <span>{tour.all_people} мест</span>
+                        </div>
+                        <div className="text-lg font-bold mt-2">
+                          {tour.discount_price.toLocaleString("ru-RU")} ₽
+                        </div>
+                      </CardContent>
+                      <CardFooter>
+                        <Button asChild className="w-full">
+                          <Link to={`/tours/${tour.id}`}>Забронировать</Link>
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              <div className="hidden md:block">
+                <CarouselPrevious className="-left-4" />
+                <CarouselNext className="-right-4" />
+              </div>
+            </Carousel>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-lg text-muted-foreground">
+                На данный момент экскурсии отсутствуют
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
