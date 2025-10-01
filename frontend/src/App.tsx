@@ -6,6 +6,7 @@ import Home from "./components/home";
 import TourDetailPage from "./pages/TourDetailPage";
 import Attractions from "./pages/Attractions";
 import AuthForms from "./components/AuthForms";
+import AdminPage from "./pages/AdminPage";
 import routes from "tempo-routes";
 import { initializeAuth } from "./utils/auth";
 import Tours from "./pages/Tours";
@@ -34,10 +35,14 @@ function App() {
             <Route path="/tours" element={<Tours />} />
             <Route path="/tours/:id" element={<TourDetail />} />
             <Route path="/attractions" element={<Attractions />} />
-            <Route path="/tours" element={<div>Экскурсии (в разработке)</div>} />
+            <Route
+              path="/tours"
+              element={<div>Экскурсии (в разработке)</div>}
+            />
             <Route path="/profile" element={<Profile />} />
             <Route path="/auth" element={<AuthForms />} />
             <Route path="/search" element={<SearchResults />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Routes>
           {import.meta.env.VITE_TEMPO === "true" && useRoutes(routes)}
         </Suspense>
